@@ -76,7 +76,7 @@ app.post('/api/reset', basicRateLimit, (req, res) => {
 
 app.post('/api/chat', basicRateLimit, async (req, res, next) => {
   try {
-    if (!GROQ_API_KEY) throw safeError('Server is not configured', 500);
+    if (!GROQ_API_KEY) throw safeError('AI service is not configured', 503);
 
     const sessionId = req.get('x-session-id');
     const { message, mode = 'balanced' } = req.body || {};
