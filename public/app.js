@@ -3,14 +3,8 @@ const form = document.getElementById('chatForm');
 const input = document.getElementById('message');
 const mode = document.getElementById('mode');
 const resetBtn = document.getElementById('resetBtn');
-const sendBtn = document.getElementById('sendBtn');
-const statusEl = document.getElementById('status');
 
 const sessionId = crypto.randomUUID();
-
-function setStatus(text) {
-  statusEl.textContent = text;
-}
 
 function addMessage(text, type = 'ai') {
   const div = document.createElement('div');
