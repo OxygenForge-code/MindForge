@@ -43,7 +43,16 @@ async function sendMessage(message) {
   sendBtn.disabled = true;
   input.disabled = true;
 
-  const aiEl = addMessage('Düşünüyorum...', 'ai');
+  const aiEl = addMessage('', 'ai');
+  aiEl.classList.add('loading');
+  aiEl.innerHTML = `
+    <span class="thinking">
+      <span class="thinking-label">Düşünüyorum</span>
+      <span class="thinking-dot"></span>
+      <span class="thinking-dot"></span>
+      <span class="thinking-dot"></span>
+    </span>
+  `;
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
@@ -59,9 +68,11 @@ async function sendMessage(message) {
       throw new Error(mapErrorMessage(data.error, res.status));
     }
 
+    aiEl.classList.remove('loading');
     await typewriter(aiEl, data.reply || 'Yanıt alınamadı.');
     setStatus('Hazır');
   } catch (err) {
+    aiEl.classList.remove('loading');
     aiEl.classList.add('error');
     aiEl.textContent = `Hata: ${err.message}`;
     setStatus('Hata');
