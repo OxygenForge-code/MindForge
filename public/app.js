@@ -3,8 +3,28 @@ const form = document.getElementById('chatForm');
 const input = document.getElementById('message');
 const mode = document.getElementById('mode');
 const resetBtn = document.getElementById('resetBtn');
+const sendBtn = document.getElementById('sendBtn');
+const statusEl = document.getElementById('status');
 
 const sessionId = crypto.randomUUID();
+
+const CLIENT_TIMEOUT_MS = 50000;
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = CLIENT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    const data = await res.json().catch(() => ({}));
+    return { res, data };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function setStatus(text) {
+  statusEl.textContent = text;
+}
 
 function addMessage(text, type = 'ai') {
   const div = document.createElement('div');
@@ -19,6 +39,7 @@ function mapErrorMessage(error, statusCode) {
   if (statusCode === 429) return 'Çok fazla istek gönderdin. Lütfen 1 dakika sonra tekrar dene.';
   if (statusCode === 503) return 'AI servisi şu an yapılandırılmamış. Yönetici GROQ_API_KEY kontrol etmeli.';
   if (statusCode === 502) return 'AI servisi şu an yanıt veremiyor. Birazdan tekrar dene.';
+  if (statusCode === 504) return 'Yanıt süresi doldu. Lütfen daha kısa bir soruyla tekrar dene.';
   return error || 'Beklenmeyen bir hata oluştu.';
 }
 
@@ -48,7 +69,7 @@ async function sendMessage(message) {
     </span>
   `;
   try {
-    const res = await fetch('/api/chat', {
+    const { res, data } = await fetchJsonWithTimeout('/api/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -56,8 +77,6 @@ async function sendMessage(message) {
       },
       body: JSON.stringify({ message, mode: mode.value })
     });
-
-    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       throw new Error(mapErrorMessage(data.error, res.status));
     }
@@ -68,7 +87,10 @@ async function sendMessage(message) {
   } catch (err) {
     aiEl.classList.remove('loading');
     aiEl.classList.add('error');
-    aiEl.textContent = `Hata: ${err.message}`;
+    const message = err.name === 'AbortError'
+      ? 'İstek zaman aşımına uğradı. Lütfen tekrar dene.'
+      : err.message;
+    aiEl.textContent = `Hata: ${message}`;
     setStatus('Hata');
   } finally {
     sendBtn.disabled = false;

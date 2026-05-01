@@ -12,6 +12,16 @@ const rateStore = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 30;
 
+const REQUEST_TIMEOUT_MS = 45000;
+
+function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timeout));
+}
+
 const allowedOrigins = FRONTEND_URL
   ? [FRONTEND_URL]
   : ['http://localhost:3000', 'http://127.0.0.1:3000'];
@@ -64,7 +74,7 @@ function getModelByMode(mode) {
 }
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
+  res.json({ status: 'ok', uptime: process.uptime(), groqConfigured: Boolean(GROQ_API_KEY) });
 });
 
 app.post('/api/reset', basicRateLimit, (req, res) => {
@@ -94,7 +104,7 @@ app.post('/api/chat', basicRateLimit, async (req, res, next) => {
       { role: 'user', content: message.trim() }
     ];
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${GROQ_API_KEY}`,
@@ -115,6 +125,9 @@ app.post('/api/chat', basicRateLimit, async (req, res, next) => {
 
     return res.json({ reply: answer, mode, model });
   } catch (error) {
+    if (error.name === 'AbortError') {
+      return next(safeError('AI response timed out', 504));
+    }
     return next(error);
   }
 });
