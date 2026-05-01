@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindForge</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="orb orb-1"></div><div class="orb orb-2"></div>
+  <main class="chat-shell">
+    <header>
+      <h1>MindForge</h1>
+      <div class="controls">
+        <select id="mode">
+          <option value="fast">Fast</option>
+          <option value="balanced" selected>Balanced</option>
+          <option value="deep">Deep</option>
+        </select>
+        <button id="resetBtn">Yeni Sohbet</button>
+      </div>
+    </header>
+    <section id="chat"></section>
+    <form id="chatForm">
+      <input id="message" autocomplete="off" placeholder="Mesajınızı yazın..." />
+      <button type="submit">Gönder</button>
+    </form>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
