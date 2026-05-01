@@ -11,15 +11,38 @@ const memoryStore = new Map();
 const rateStore = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 30;
-
 const REQUEST_TIMEOUT_MS = 45000;
+const USE_LOCAL_AI = process.env.USE_LOCAL_AI === 'true';
+
+function buildLongForm(message, mode) {
+  const sections = [
+    'Konu Özeti', 'Adım Adım Plan', 'Kritik Riskler', 'İyileştirme Önerileri',
+    'Hızlı Kontrol Listesi', 'Örnek Uygulama', 'Sonuç'
+  ];
+  const tone = mode === 'deep' ? 'derin ve analitik' : mode === 'fast' ? 'kısa ve net' : 'dengeli';
+  const blocks = sections.map((title, i) => `### ${i + 1}. ${title}\n- Bu bölüm, "${message}" konusu için ${tone} bir değerlendirme sunar.\n- Öncelik: netlik, uygulanabilirlik ve ölçülebilir adımlar.\n- Pratik öneri: küçük iterasyonlarla ilerle, her adımı doğrula.`);
+  return blocks.join('\n\n');
+}
+
+function generateLocalResponse(message, mode = 'balanced') {
+  const normalized = String(message || '').trim();
+  if (!normalized) return 'Sorunu bir cümle ile yaz, hemen çözelim.';
+
+  const header = `MindForge Local AI (${mode})`;
+  const concise = `Sorunu aldım: "${normalized}". Önce kök sebebi bulup sonra çözüme geçelim.`;
+  const long = `${header}\n\n${concise}\n\n${buildLongForm(normalized, mode)}`;
+
+  if (/10\s*bin|10000|uzun|detaylı|çok uzun/i.test(normalized)) {
+    return long.repeat(10).slice(0, 10000);
+  }
+
+  return long;
+}
 
 function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  return fetch(url, { ...options, signal: controller.signal })
-    .finally(() => clearTimeout(timeout));
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeout));
 }
 
 const allowedOrigins = FRONTEND_URL
@@ -48,19 +71,15 @@ function basicRateLimit(req, res, next) {
   const key = req.ip || 'unknown';
   const now = Date.now();
   const bucket = rateStore.get(key) || { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS };
-
   if (now > bucket.resetAt) {
     bucket.count = 0;
     bucket.resetAt = now + RATE_LIMIT_WINDOW_MS;
   }
-
   bucket.count += 1;
   rateStore.set(key, bucket);
-
   if (bucket.count > RATE_LIMIT_MAX) {
     return res.status(429).json({ error: 'Too many requests. Please try again shortly.' });
   }
-
   return next();
 }
 
@@ -74,7 +93,7 @@ function getModelByMode(mode) {
 }
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), groqConfigured: Boolean(GROQ_API_KEY) });
+  res.json({ status: 'ok', uptime: process.uptime(), groqConfigured: Boolean(GROQ_API_KEY), localAi: USE_LOCAL_AI });
 });
 
 app.post('/api/reset', basicRateLimit, (req, res) => {
@@ -86,18 +105,24 @@ app.post('/api/reset', basicRateLimit, (req, res) => {
 
 app.post('/api/chat', basicRateLimit, async (req, res, next) => {
   try {
-    if (!GROQ_API_KEY) throw safeError('AI service is not configured', 503);
-
     const sessionId = req.get('x-session-id');
-    const { message, mode = 'balanced' } = req.body || {};
-
     if (!sessionId) return res.status(400).json({ error: 'Missing session id' });
+
+    const { message, mode = 'balanced' } = req.body || {};
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const model = getModelByMode(mode);
     const history = memoryStore.get(sessionId) || [];
+
+    if (USE_LOCAL_AI || !GROQ_API_KEY) {
+      const localReply = generateLocalResponse(message, mode);
+      const updated = [...history, { role: 'user', content: message.trim() }, { role: 'assistant', content: localReply }].slice(-10);
+      memoryStore.set(sessionId, updated);
+      return res.json({ reply: localReply, mode, model: 'mindforge-local-v1', source: 'local' });
+    }
+
+    const model = getModelByMode(mode);
     const messages = [
       { role: 'system', content: 'You are MindForge, a concise and helpful AI assistant.' },
       ...history,
@@ -107,27 +132,22 @@ app.post('/api/chat', basicRateLimit, async (req, res, next) => {
     const response = await fetchWithTimeout('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ model, messages, temperature: 0.7 })
     });
 
-    if (!response.ok) {
-      throw safeError('Upstream AI service error', 502);
-    }
+    if (!response.ok) throw safeError('Upstream AI service error', 502);
 
     const data = await response.json();
     const answer = data?.choices?.[0]?.message?.content || 'No response generated.';
-
     const updated = [...history, { role: 'user', content: message.trim() }, { role: 'assistant', content: answer }].slice(-10);
     memoryStore.set(sessionId, updated);
 
-    return res.json({ reply: answer, mode, model });
+    return res.json({ reply: answer, mode, model, source: 'groq' });
   } catch (error) {
-    if (error.name === 'AbortError') {
-      return next(safeError('AI response timed out', 504));
-    }
+    if (error.name === 'AbortError') return next(safeError('AI response timed out', 504));
     return next(error);
   }
 });
