@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindForge</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <button id="resetBtn" class="primary full">+ Yeni Sohbet</button>
+      <div class="card">
+        <label for="mode">Model Modu</label>
+        <select id="mode">
+          <option value="fast">Fast</option>
+          <option value="balanced" selected>Balanced</option>
+          <option value="deep">Deep</option>
+        </select>
+        <p class="hint">Fast: Hızlı • Balanced: Dengeli • Deep: Derin analiz</p>
+      </div>
+      <div class="card">
+        <p class="tiny">API anahtarı sadece backend'de tutulur. Frontend yalnızca /api/chat endpoint'ine istek atar.</p>
+      </div>
+    </aside>
+
+    <section class="chat-shell">
+      <header class="topbar">
+        <h1>MindForge</h1>
+        <span id="status" class="status">Hazır</span>
+      </header>
+
+      <section id="chat" class="chat"></section>
+
+      <form id="chatForm" class="composer">
+        <input id="message" autocomplete="off" placeholder="Sorunu yaz, birlikte çözelim..." maxlength="4000" />
+        <button id="sendBtn" type="submit" class="primary">Gönder</button>
+      </form>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
